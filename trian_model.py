@@ -40,29 +40,26 @@ env.config.update({
         "lateral":False
     }
 })
+attribution_method = 'Gradient'
 obs = env.reset()  # 随机获取环境中的状态 # 随机获取环境中的状态
-for i in range(16, 19, 1):
-    #%% 训练模型
-    file_path_model = 'dqn_attri/' + "model_%d" % (i)
-    file_path_log = 'dqn_attri/' + "log_%d/" % (i)
-    data_path = 'dqn_attri/' + "data_%d.pth" % (i)
-    model = DQN('MlpPolicy', env,
-                # policy_kwargs=dict(net_arch=[128, 128]),
-                learning_rate=2e-4,
-                buffer_size=15000,
-                learning_starts=50,
-                batch_size=64,
-                gamma=0.5,
-                train_freq=1,
-                exploration_fraction=0.2,     #这个改动了
-                gradient_steps=1,
-                target_update_interval=50,
-                verbose=1,
-                self_define=i,
-                tensorboard_log=file_path_log)
-    if Learn:
-        model.learn(total_timesteps=15000)
-        model.save(file_path_model)
+file_path_model = './temp_direct/' + attribution_method + '/model'
+file_path_log = './temp_direct/' + attribution_method + '/log'
+model = DQN('MlpPolicy', env,
+            # policy_kwargs=dict(net_arch=[128, 128]),
+            learning_rate=2e-4,
+            buffer_size=15000,
+            learning_starts=50,
+            batch_size=64,
+            gamma=0.5,
+            train_freq=1,
+            exploration_fraction=0.2,     #这个改动了
+            gradient_steps=1,
+            target_update_interval=50,
+            verbose=1,
+            attribution_method=attribution_method,
+            tensorboard_log=file_path_log)
+model.learn(total_timesteps=15000)
+model.save(file_path_model)
 
 
 
