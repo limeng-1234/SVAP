@@ -17,6 +17,45 @@ import torch
 import torch.nn as nn
 SelfDQN = TypeVar("SelfDQN", bound="DQN")
 
+def gradient_method(model, baselines, input_tensor):
+    """
+    计算梯度显著图（Gradient Saliency），支持批量输入，并保留梯度信息以进行后续优化。
+
+    参数:
+        model (nn.Module): PyTorch模型。
+        input_tensor (torch.Tensor): 输入张量，形状为 (batch_size, n_features)。
+
+    返回:
+        feature_importance (torch.Tensor): 特征重要性，形状为 (batch_size, output_dim, n_features)。
+        gradients (torch.Tensor): 原始梯度值，形状为 (batch_size, output_dim, n_features)。
+    """
+    # 确保输入张量需要梯度
+    input_tensor = input_tensor.clone().detach().requires_grad_(True)
+
+    # 前向传播
+    output = model(input_tensor)  # 输出形状: (batch_size, output_dim)
+
+    batch_size, output_dim = output.shape
+    n_features = input_tensor.shape[1]
+
+    # 初始化梯度张量
+    gradients = torch.zeros(batch_size, output_dim, n_features, device=input_tensor.device)
+
+    # 使用 torch.autograd.grad 计算梯度，保持计算图连贯
+    for i in range(output_dim):
+        # 对每个输出类别，计算梯度
+        grad_output = output[:, i].sum()  # 将当前类别的所有样本输出求和，得到一个标量
+
+        # 计算梯度
+        grad = torch.autograd.grad(
+            outputs=grad_output,
+            inputs=input_tensor,
+            retain_graph=True,
+            create_graph=True
+        )[0]  # grad 的形状: (batch_size, n_features)
+
+        gradients[:, i, :] = grad
+    return gradients * (input_tensor-baselines).unsqueeze(1)
 def compute_attributions(model, reference_input, actual_inputs):
     # 前向传播得到输出
     all_attri = []
@@ -274,18 +313,23 @@ class DQN(OffPolicyAlgorithm):
 
             # Compute Huber loss (less sensitive to outliers)
             loss = F.smooth_l1_loss(current_q_values, target_q_values)
-            if self.num_timesteps > 100:
-                # if self.self_define < 12:
-                #     if self.self_define < 4:
-                #         abc = 0.5
-                #     elif 4 <= self.self_define < 8:
-                #         abc = 2
-                #     else:
-                #         abc = 1000
-                    # 计算特征归因
-                attributions = compute_attributions(self.q_net.q_net, replay_data.observations.squeeze()[1:2], replay_data.observations.squeeze()[32:40])
-                attributions_tensor = torch.mean(torch.abs(torch.stack(attributions,dim=0)[:,2,1]))
-                loss = loss + 5000 * torch.abs(attributions_tensor)
+            if self.attribution_method == 'Gradient':
+                attributions = gradient_method(self.q_net.q_net, replay_data.observations.squeeze()[1:2], replay_data.observations.squeeze()[32:40])
+                attributions_tensor = torch.sum(torch.abs(attributions[:, 2, 1]))
+                loss = loss + 2 * torch.abs(attributions_tensor)
+            else:
+                if self.num_timesteps > 100:
+                    # if self.self_define < 12:
+                    #     if self.self_define < 4:
+                    #         abc = 0.5
+                    #     elif 4 <= self.self_define < 8:
+                    #         abc = 2
+                    #     else:
+                    #         abc = 1000
+                        # 计算特征归因
+                    attributions = compute_attributions(self.q_net.q_net, replay_data.observations.squeeze()[1:2], replay_data.observations.squeeze()[32:40])
+                    attributions_tensor = torch.abs(torch.stack(attributions,dim=0)[:,2,1])
+                    loss = loss + 1000 * torch.abs(attributions_tensor)
             losses.append(loss.item())
             # print(loss.item())
             # Optimize the policy
