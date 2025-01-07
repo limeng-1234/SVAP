@@ -1,0 +1,1 @@
+In this project, the DQN algorithm is based on the Stable-baselines3 library, with modifications made to its underlying code. During runtime, the `dqn.py` file from the `other_file` directory replaces the original `dqn.py` file.
